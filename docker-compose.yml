@@ -1,0 +1,31 @@
+services:
+  api:
+    build: .
+    ports:
+      - "5555:5555"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://tfl:tfl@db:5432/tfl_scheduler
+      FLASK_HOST: 0.0.0.0
+      FLASK_PORT: 5555
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tfl
+      POSTGRES_PASSWORD: tfl
+      POSTGRES_DB: tfl_scheduler
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tfl -d tfl_scheduler"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
