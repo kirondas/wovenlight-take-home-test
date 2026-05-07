@@ -24,7 +24,7 @@ def create_app(
     app = Flask(__name__)
     app.config["TESTING"] = config.testing
 
-    session_factory, engine = build_session_factory(config.database_url)
+    session_factory, _ = build_session_factory(config.database_url)
     repository = TaskRepository(session_factory)
     disruption_provider = provider or TflClient(
         base_url=config.tfl_base_url,
@@ -32,8 +32,6 @@ def create_app(
     )
     task_scheduler = TaskScheduler(repository, disruption_provider)
 
-    app.extensions["db_engine"] = engine
-    app.extensions["session_factory"] = session_factory
     app.extensions["task_repository"] = repository
     app.extensions["task_scheduler"] = task_scheduler
 
