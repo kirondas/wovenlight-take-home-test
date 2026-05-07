@@ -10,65 +10,106 @@ contains the external TFL call. The TFL client is treated as a replaceable
 provider, so it could later be swapped for an ML inference call with the same
 task lifecycle.
 
-## Tech Stack
+---
 
-- Python 3.10+
-- Flask
-- SQLAlchemy
-- APScheduler
-- PostgreSQL
-- Docker Compose
-- pytest
+## How to run the server
 
-## Run With Docker
+### With Docker (recommended)
 
 ```bash
 docker compose up --build
 ```
 
-The API will be available at:
+The API listens on **http://localhost:5555**. Compose runs two services: **`api`**
+(Flask + in-process APScheduler) and **`db`** (PostgreSQL). The project name is
+set in `docker-compose.yml` (`name: tfl-scheduler`) so container names are
+prefixed `tfl-scheduler-*`, not the clone folder name.
 
-```text
-http://localhost:5555
-```
+Environment variables for the API (defaults are set in `docker-compose.yml`):
 
-Docker Compose starts two containers:
+- **`DATABASE_URL`** — SQLAlchemy URL (Postgres in Compose).
+- **`FLASK_HOST`**, **`FLASK_PORT`** — bind address and port (Compose uses
+  `0.0.0.0` and `5555` so the port mapping works).
+- **`TFL_BASE_URL`**, **`REQUEST_TIMEOUT_SECONDS`**, **`START_SCHEDULER`** —
+  optional; see `src/tfl_scheduler/config.py`.
 
-- `api`: the Flask service and in-process scheduler.
-- `db`: PostgreSQL for task state and results.
+### Without Docker (local Python)
 
-## Run Tests
-
-Install dependencies:
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-Run the test suite:
+Requires a running PostgreSQL instance whose URL matches **`DATABASE_URL`**
+(default in code: `postgresql+psycopg2://tfl:tfl@localhost:5432/tfl_scheduler`).
 
 ```bash
+python -m pip install -r requirements.txt .
+set DATABASE_URL=postgresql+psycopg2://tfl:tfl@localhost:5432/tfl_scheduler
+set FLASK_HOST=127.0.0.1
+python -m tfl_scheduler.app
+```
+
+On Unix shells, use `export DATABASE_URL=...` instead of `set`.
+
+---
+
+## How to run tests
+
+```bash
+python -m pip install -r requirements.txt .
 python -m pytest
 ```
 
-The tests use SQLite in memory for speed and mock the TFL provider so they do
-not depend on the live TFL API.
+Optional verbosity: `python -m pytest -v`.
 
-## API
+Tests use **SQLite in-memory**, inject **`create_app(..., start_scheduler=False)`**,
+and use a **fake TFL provider** so they do not call the live TfL API.
 
-### Health Check
+---
+
+## API overview
+
+All JSON bodies must be **objects**. Errors use
+`{"error": {"code": "<string>", "message": "<string>"}}` unless noted.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Liveness: `{"status":"ok"}`. |
+| `POST` | `/tasks` | Create a task. Body: `lines` (required), `schedule_time` (optional). **201** + task JSON. |
+| `GET` | `/tasks` | List tasks. Query: optional `status` (`pending`, `running`, `succeeded`, `failed`). |
+| `GET` | `/tasks/<task_id>` | Get one task. **404** if missing. |
+| `PATCH` | `/tasks/<task_id>` | Update **pending** task only (`schedule_time` and/or `lines`). **409** if not pending. |
+| `DELETE` | `/tasks/<task_id>` | Delete task. **409** if **running**. **204** on success. |
+
+### Task JSON shape
+
+Each task is returned as a JSON object with:
+
+- **`id`** — UUID string.
+- **`schedule_time`** — ISO-like string (no timezone; wall clock as stored).
+- **`lines`** — comma-separated line IDs (see below).
+- **`status`** — `pending`, `running`, `succeeded`, or `failed`.
+- **`result`** — TfL-shaped list of disruption objects, or `null` until success.
+- **`error_message`** — string on failure, else `null`.
+- **`created_at`**, **`updated_at`**, **`executed_at`** — timestamps or `null`.
+
+### Request fields
+
+- **`schedule_time`** — String `YYYY-MM-DDTHH:MM:SS`. If missing or empty on
+  create/update (where applicable), the service uses **now**. Times are **naive**
+  (server local clock). If the stored time is in the **past**, the scheduler
+  still runs the job **as soon as possible** (`max(schedule_time, now)`), while
+  the stored `schedule_time` field is unchanged.
+- **`lines`** — Comma-separated TfL **line IDs** (not display names), e.g.
+  `victoria,central`.
+
+### Example calls
+
+**Health**
 
 ```bash
 curl http://localhost:5555/health
 ```
 
-Response:
+Response: `{"status":"ok"}`
 
-```json
-{"status": "ok"}
-```
-
-### Create A Task
+**Create a task**
 
 ```bash
 curl -X POST \
@@ -77,11 +118,7 @@ curl -X POST \
   http://localhost:5555/tasks
 ```
 
-JSON field **`schedule_time`** uses local wall time in the form
-`%Y-%m-%dT%H:%M:%S` (see task brief).
-
-If `schedule_time` is empty or missing, the task is scheduled to run
-immediately:
+**Create with immediate default time** (omit or empty `schedule_time`):
 
 ```bash
 curl -X POST \
@@ -90,107 +127,97 @@ curl -X POST \
   http://localhost:5555/tasks
 ```
 
-### List Tasks
+**List / filter**
 
 ```bash
 curl http://localhost:5555/tasks
-```
-
-Optional status filter:
-
-```bash
 curl http://localhost:5555/tasks?status=pending
 ```
 
-Valid statuses are `pending`, `running`, `succeeded`, and `failed`.
-
-### Get One Task
+**Get / update / delete**
 
 ```bash
 curl http://localhost:5555/tasks/<task_id>
-```
-
-Completed tasks include `result`. Failed tasks include `error_message`.
-
-### Update A Pending Task
-
-```bash
 curl -X PATCH \
   -H "Content-Type: application/json" \
   -d '{"schedule_time":"2099-01-01T18:30:00","lines":"jubilee"}' \
   http://localhost:5555/tasks/<task_id>
-```
-
-Only `pending` tasks can be updated. Once a task is `running`, `succeeded`, or
-`failed`, the service returns `409 Conflict`.
-
-### Delete A Task
-
-```bash
 curl -X DELETE http://localhost:5555/tasks/<task_id>
 ```
 
-Pending tasks are also removed from APScheduler. Running tasks cannot be
-deleted and return `409 Conflict`.
-
-## Valid Line IDs
-
-The service accepts TFL Tube line IDs, not display names:
+### Valid line IDs
 
 ```text
 bakerloo, central, circle, district, hammersmith-city, jubilee,
 metropolitan, northern, piccadilly, victoria, waterloo-city
 ```
 
-## Error Handling
+### Error handling
 
-The API returns clear JSON errors for invalid input, missing tasks, and invalid
-task state transitions.
+Validation and bad input → **400** with `validation_error`. Missing task or
+route → **404**. Wrong task state (e.g. patch non-pending, delete while
+running) → **409** with codes such as `task_not_pending`, `task_running`.
 
-Scheduled task failures are stored on the task record instead of crashing the
-service. This includes:
+Scheduled work that fails (TfL timeout, HTTP error, bad JSON, unexpected
+errors) is recorded on the task (`failed` + `error_message`) without crashing
+the process.
 
-- TFL/provider timeouts.
-- TFL/provider HTTP failures.
-- Invalid or malformed provider responses.
-- Unexpected runtime exceptions.
+---
 
-This is similar to how I would handle a scheduled ML model call. If TFL were
-replaced by model inference, the same lifecycle could record model loading
-errors, inference timeouts, invalid prediction payloads, or unexpected runtime
-failures.
+## Tech stack
 
-## Design Decisions
+- Python 3.10+
+- Flask, SQLAlchemy, APScheduler, PostgreSQL, Docker Compose, pytest
 
-- Flask was chosen because it is simple, explicit, and suggested in the task.
-- PostgreSQL was chosen over SQLite to demonstrate realistic persistence and a
-  multi-container Docker setup.
-- APScheduler is used in-process to keep the exercise understandable within a
-  few hours.
-- UUIDs are used for task IDs so clients do not depend on database row numbers.
-- Task status is explicit: `pending`, `running`, `succeeded`, or `failed`.
-- The provider client is isolated so the external call can be replaced without
-  rewriting the API or repository layers.
+---
 
-## Limitations And Improvements
+## Design decisions (short)
 
-- The scheduler runs inside the Flask process. In a multi-replica deployment,
-  this could cause duplicate execution unless replaced with a distributed
-  scheduler, queue, or database locking strategy.
-- There is no authentication or rate limiting. A production service should add
-  both.
-- Database migrations are not included. For production, I would add Alembic.
-- Failed tasks are not retried automatically. A production version could add
-  retry policy for transient provider failures.
-- Observability is minimal. I would add structured logs, metrics, and alerts
-  for failed task execution.
-- The service stores raw TFL responses. For production, I would define a stricter
-  result schema and possibly store normalized disruption records.
+- Flask for a small, explicit HTTP surface.
+- PostgreSQL in Docker for realistic persistence; SQLite in tests for speed.
+- APScheduler in-process to keep the exercise bounded; provider behind a
+  protocol for testability and future swaps.
+- UUID task IDs; explicit task status enum.
 
-## Time Spent
+---
 
-Approximately 3-4 hours.
+## Limitations
 
-I used Flask, SQLAlchemy, APScheduler, Docker Compose, and pytest. I had used
-the general patterns before, but checked the exact task requirements carefully
-while building the service.
+- **Single-process scheduler** — Not safe for multiple API replicas without a
+  distributed queue, leader election, or DB-backed locking.
+- **No auth or rate limiting** — Would be required for a public service.
+- **No migrations** — Tables are created with `create_all`; production would use
+  Alembic (or similar).
+- **No automatic retries** — Failed tasks stay failed; transient outages would
+  need a retry policy.
+- **Limited observability** — No structured metrics/tracing; logging is basic.
+- **Loose result typing** — Success `result` is JSON from TfL, not a strict
+  domain schema.
+- **Naive datetimes** — No timezone handling; behavior follows the server clock.
+
+---
+
+## Time spent
+
+**Approximately 4 hours** end-to-end (implementation, Docker, tests, and README).
+Adjust this line if your own tally differs.
+
+---
+
+## Technologies and learning
+
+**Already familiar:** Python, Flask, SQLAlchemy, pytest, Docker Compose, REST
+APIs.
+
+**Learned or refreshed while doing this exercise:** (edit to match your
+experience — examples below)
+
+- Wiring **APScheduler** `date` triggers to repository callbacks and keeping
+  jobs in sync with CRUD.
+- **TfL Line Disruption** endpoint shape and treating the client as a pluggable
+  **provider** behind a `Protocol`.
+- Compose **healthchecks** and **`depends_on: condition: service_healthy`** so
+  the API starts after Postgres accepts connections.
+
+If you had not used one of the above before, say so honestly in one sentence
+per item.
