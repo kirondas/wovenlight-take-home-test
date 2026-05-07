@@ -63,7 +63,7 @@ def parse_lines(raw_lines: Any, *, required: bool) -> list[str] | None:
             continue
         if line_id not in VALID_LINE_IDS:
             raise ValidationError(
-                f"Unknown line id '{line_id}'. Valid ids are: "
+                f"Unknown line '{line_id}'. Valid lines are: "
                 f"{', '.join(sorted(VALID_LINE_IDS))}."
             )
         if line_id not in seen:
@@ -71,11 +71,11 @@ def parse_lines(raw_lines: Any, *, required: bool) -> list[str] | None:
             seen.add(line_id)
 
     if not line_ids:
-        raise ValidationError("At least one line id is required.")
+        raise ValidationError("At least one line is required.")
     return line_ids
 
 
-def serialize_task(task: Task) -> dict[str, Any]:
+def serialise_task(task: Task) -> dict[str, Any]:
     return {
         "id": task.id,
         "schedule_time": _format_datetime(task.schedule_time),

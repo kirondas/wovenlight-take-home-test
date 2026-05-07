@@ -74,7 +74,7 @@ Minimum one ID after stripping or error.
 
 ---
 
-## `serialize_task(task)`
+## `serialise_task(task)`
 
 Flask’s `jsonify` needs plain dict/str/list/null JSON types.
 

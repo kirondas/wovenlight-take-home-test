@@ -12,7 +12,7 @@ from .schemas import (
     ValidationError,
     extract_schedule_time,
     parse_lines,
-    serialize_task,
+    serialise_task,
 )
 from .tfl_client import DisruptionProvider, TflClient
 
@@ -63,7 +63,7 @@ def register_routes(
 
         task = repository.create_task(schedule_time=schedule_time, lines=lines)
         task_scheduler.schedule_task(task)
-        return jsonify(serialize_task(task)), HTTPStatus.CREATED
+        return jsonify(serialise_task(task)), HTTPStatus.CREATED
 
     @app.get("/tasks")
     def list_tasks():
@@ -74,14 +74,14 @@ def register_routes(
             )
 
         tasks = repository.list_tasks(status=status)
-        return jsonify([serialize_task(task) for task in tasks]), HTTPStatus.OK
+        return jsonify([serialise_task(task) for task in tasks]), HTTPStatus.OK
 
     @app.get("/tasks/<task_id>")
     def get_task(task_id: str):
         task = repository.get_task(task_id)
         if task is None:
             return _error("not_found", "Task not found.", HTTPStatus.NOT_FOUND)
-        return jsonify(serialize_task(task)), HTTPStatus.OK
+        return jsonify(serialise_task(task)), HTTPStatus.OK
 
     @app.patch("/tasks/<task_id>")
     def update_task(task_id: str):
@@ -114,7 +114,7 @@ def register_routes(
             lines=lines,
         )
         task_scheduler.reschedule_task(updated_task)
-        return jsonify(serialize_task(updated_task)), HTTPStatus.OK
+        return jsonify(serialise_task(updated_task)), HTTPStatus.OK
 
     @app.delete("/tasks/<task_id>")
     def delete_task(task_id: str):
