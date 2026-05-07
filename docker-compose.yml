@@ -1,19 +1,21 @@
 name: tfl-scheduler
 
 services:
-  api:
+  scheduler-api:
+    container_name: tfl-scheduler-api
     build: .
     ports:
       - "5555:5555"
     environment:
-      DATABASE_URL: postgresql+psycopg2://tfl:tfl@db:5432/tfl_scheduler
+      DATABASE_URL: postgresql+psycopg2://tfl:tfl@postgres:5432/tfl_scheduler
       FLASK_HOST: 0.0.0.0
       FLASK_PORT: 5555
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
 
-  db:
+  postgres:
+    container_name: tfl-scheduler-postgres
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: tfl

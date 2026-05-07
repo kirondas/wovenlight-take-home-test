@@ -20,10 +20,11 @@ task lifecycle.
 docker compose up --build
 ```
 
-The API listens on **http://localhost:5555**. Compose runs two services: **`api`**
-(Flask + in-process APScheduler) and **`db`** (PostgreSQL). The project name is
-set in `docker-compose.yml` (`name: tfl-scheduler`) so container names are
-prefixed `tfl-scheduler-*`, not the clone folder name.
+The API listens on **http://localhost:5555**. Compose runs **`scheduler-api`**
+(Flask + in-process APScheduler) and **`postgres`**. Containers use fixed names
+**`tfl-scheduler-api`** and **`tfl-scheduler-postgres`** so they are easy to spot
+in `docker ps`. The Compose project name is **`tfl-scheduler`** (see
+`docker-compose.yml`).
 
 Environment variables for the API (defaults are set in `docker-compose.yml`):
 
