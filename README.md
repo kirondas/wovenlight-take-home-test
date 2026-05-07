@@ -2,45 +2,22 @@
 
 A small Flask service for scheduling calls to Transport for London's Line Disruption API and storing the result for later retrieval.
 
-The service is intentionally simple, but it is structured like a small production codebase: the API layer validates requests, the repository owns database access, the scheduler decides when work runs, and the provider client contains the external TFL call. The TFL client is treated as a replaceable provider, so it could later be swapped for an ML inference call with the same task lifecycle.
+The service is intentionally simple. However, it is structured like a small production codebase, where:
+
+- The API layer validates requests
+- The repository owns database access
+- The scheduler decides when work runs
+- The provider client contains the external TFL call
+
+The TFL client is treated as a replaceable provider, so it could later be swapped for an ML inference call with the same task lifecycle.
 
 ---
 
-## How to run the server
-
-### With Docker (recommended)
+## How to run the server (Docker)
 
 ```bash
 docker compose up --build
 ```
-
-The API listens on **http://localhost:5555**. Compose runs **`scheduler-api`**
-(Flask + in-process APScheduler) and **`postgres`**. Containers use fixed names
-**`tfl-scheduler-api`** and **`tfl-scheduler-postgres`** so they are easy to spot
-in `docker ps`. The Compose project name is **`tfl-scheduler`** (see
-`docker-compose.yml`).
-
-Environment variables for the API (defaults are set in `docker-compose.yml`):
-
-- **`DATABASE_URL`** — SQLAlchemy URL (Postgres in Compose).
-- **`FLASK_HOST`**, **`FLASK_PORT`** — bind address and port (Compose uses
-  `0.0.0.0` and `5555` so the port mapping works).
-- **`TFL_BASE_URL`**, **`REQUEST_TIMEOUT_SECONDS`**, **`START_SCHEDULER`** —
-  optional; see `src/tfl_scheduler/config.py`.
-
-### Without Docker (local Python)
-
-Requires a running PostgreSQL instance whose URL matches **`DATABASE_URL`**
-(default in code: `postgresql+psycopg2://tfl:tfl@localhost:5432/tfl_scheduler`).
-
-```bash
-python -m pip install -r requirements.txt .
-set DATABASE_URL=postgresql+psycopg2://tfl:tfl@localhost:5432/tfl_scheduler
-set FLASK_HOST=127.0.0.1
-python -m tfl_scheduler.app
-```
-
-On Unix shells, use `export DATABASE_URL=...` instead of `set`.
 
 ---
 
@@ -55,60 +32,46 @@ python -m pip install -r requirements.txt .
 python -m pytest
 ```
 
-In **PowerShell**, use the same steps; activation is typically:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt .
-python -m pytest
-```
-
-If `Activate.ps1` is blocked, run **`Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`** once, or activate with **`.venv\Scripts\activate.bat`** instead.
-
-Optional: `python -m pytest -v` for one line per test.
-
-Tests use **SQLite in-memory**, **`create_app(..., start_scheduler=False)`**, and a **fake TFL provider** (no live TfL calls).
-
 ---
 
 ## API overview
 
-All JSON bodies must be **objects**. Errors use
-`{"error": {"code": "<string>", "message": "<string>"}}` unless noted.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Liveness: `{"status":"ok"}`. |
-| `POST` | `/tasks` | Create a task. Body: `lines` (required), `schedule_time` (optional). **201** + task JSON. |
-| `GET` | `/tasks` | List tasks. Query: optional `status` (`pending`, `running`, `succeeded`, `failed`). |
-| `GET` | `/tasks/<task_id>` | Get one task. **404** if missing. |
-| `PATCH` | `/tasks/<task_id>` | Update **pending** task only (`schedule_time` and/or `lines`). **409** if not pending. |
-| `DELETE` | `/tasks/<task_id>` | Delete task. **409** if **running**. **204** on success. |
+| Method   | Path               | Description                                                                               |
+| -------- | ------------------ | ----------------------------------------------------------------------------------------- |
+| `GET`    | `/health`          | Liveness: `{"status":"ok"}`.                                                              |
+| `POST`   | `/tasks`           | Create a task. Body: `lines` (required), `schedule_time` (optional). **201** + task JSON. |
+| `GET`    | `/tasks`           | List tasks. Query: optional `status` (`pending`, `running`, `succeeded`, `failed`).       |
+| `GET`    | `/tasks/<task_id>` | Get one task. **404** if missing.                                                         |
+| `PATCH`  | `/tasks/<task_id>` | Update **pending** task only (`schedule_time` and/or `lines`). **409** if not pending.    |
+| `DELETE` | `/tasks/<task_id>` | Delete task. **409** if **running**. **204** on success.                                  |
+
 
 ### Task JSON shape
 
 Each task is returned as a JSON object with:
 
-- **`id`** — UUID string.
-- **`schedule_time`** — ISO-like string (no timezone; wall clock as stored).
-- **`lines`** — comma-separated line IDs (see below).
-- **`status`** — `pending`, `running`, `succeeded`, or `failed`.
-- **`result`** — TfL-shaped list of disruption objects, or `null` until success.
-- **`error_message`** — string on failure, else `null`.
-- **`created_at`**, **`updated_at`**, **`executed_at`** — timestamps or `null`.
+- `**id`** — UUID string.
+- `**schedule_time`** — ISO-like string (no timezone; wall clock as stored).
+- `**lines**` — comma-separated line IDs (see below).
+- `**status**` — `pending`, `running`, `succeeded`, or `failed`.
+- `**result**` — TfL-shaped list of disruption objects, or `null` until success.
+- `**error_message**` — string on failure, else `null`.
+- `**created_at**`, `**updated_at**`, `**executed_at**` — timestamps or `null`.
 
 ### Request fields
 
-- **`schedule_time`** — String `YYYY-MM-DDTHH:MM:SS`. If missing or empty on
-  create/update (where applicable), the service uses **now**. Times are **naive**
-  (server local clock). If the stored time is in the **past**, the scheduler
-  still runs the job **as soon as possible** (`max(schedule_time, now)`), while
-  the stored `schedule_time` field is unchanged.
-- **`lines`** — Comma-separated TfL **line IDs** (not display names), e.g.
-  `victoria,central`.
+- `**schedule_time**` — String `YYYY-MM-DDTHH:MM:SS`. If missing or empty on
+create/update (where applicable), the service uses **now**. Times are **naive**
+(server local clock). If the stored time is in the **past**, the scheduler
+still runs the job **as soon as possible** (`max(schedule_time, now)`), while
+the stored `schedule_time` field is unchanged.
+- `**lines`** — Comma-separated TfL **line IDs** (not display names), e.g.
+`victoria,central`.
 
-### Example calls
+---
+
+## Example calls
 
 **Health**
 
@@ -185,7 +148,7 @@ the process.
 - Flask for a small, explicit HTTP surface.
 - PostgreSQL in Docker for realistic persistence; SQLite in tests for speed.
 - APScheduler in-process to keep the exercise bounded; provider behind a
-  protocol for testability and future swaps.
+protocol for testability and future swaps.
 - UUID task IDs; explicit task status enum.
 
 ---
@@ -193,15 +156,15 @@ the process.
 ## Limitations
 
 - **Single-process scheduler** — Not safe for multiple API replicas without a
-  distributed queue, leader election, or DB-backed locking.
+distributed queue, leader election, or DB-backed locking.
 - **No auth or rate limiting** — Would be required for a public service.
 - **No migrations** — Tables are created with `create_all`; production would use
-  Alembic (or similar).
+Alembic (or similar).
 - **No automatic retries** — Failed tasks stay failed; transient outages would
-  need a retry policy.
+need a retry policy.
 - **Limited observability** — No structured metrics/tracing; logging is basic.
 - **Loose result typing** — Success `result` is JSON from TfL, not a strict
-  domain schema.
+domain schema.
 - **Naive datetimes** — No timezone handling; behavior follows the server clock.
 
 ---
@@ -222,11 +185,11 @@ APIs.
 experience — examples below)
 
 - Wiring **APScheduler** `date` triggers to repository callbacks and keeping
-  jobs in sync with CRUD.
+jobs in sync with CRUD.
 - **TfL Line Disruption** endpoint shape and treating the client as a pluggable
-  **provider** behind a `Protocol`.
-- Compose **healthchecks** and **`depends_on: condition: service_healthy`** so
-  the API starts after Postgres accepts connections.
+**provider** behind a `Protocol`.
+- Compose **healthchecks** and `**depends_on: condition: service_healthy`** so
+the API starts after Postgres accepts connections.
 
 If you had not used one of the above before, say so honestly in one sentence
 per item.
