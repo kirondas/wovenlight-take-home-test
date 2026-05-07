@@ -4,7 +4,7 @@ These notes match the Python modules under [`src/tfl_scheduler/`](../../src/tfl_
 
 | Order | File | What it does |
 |-------|------|----------------|
-| 1 | [`__init__.md`](__init__.md) | Package entry: re-exports `create_app`. |
+| 1 | [`__init__.md`](__init__.md) | Empty `__init__.py` — import `create_app` from `app.py`. |
 | 2 | [`config.md`](config.md) | Loads settings from environment variables. |
 | 3 | [`models.md`](models.md) | Database table shape (`Task`, `TaskStatus`). |
 | 4 | [`database.md`](database.md) | Creates engine, tables, and DB sessions. |
