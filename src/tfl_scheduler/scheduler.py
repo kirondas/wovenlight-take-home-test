@@ -65,7 +65,7 @@ class TaskScheduler:
             self._repository.mark_succeeded(task_id, result)
         except ProviderError as exc:
             self._repository.mark_failed(task_id, str(exc))
-        except Exception as exc:  # noqa: BLE001 - record model/runtime failures.
+        except Exception as exc:
             self._repository.mark_failed(
                 task_id,
                 f"Unexpected provider execution error: {exc}",
