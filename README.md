@@ -2,18 +2,52 @@
 
 A small Flask service for scheduling calls to Transport for London's Line Disruption API and storing the result for later retrieval.
 
-The service is intentionally simple. However, it is structured like a small production codebase, where:
+---
 
-- The API layer validates requests
-- The repository owns database access
-- The scheduler decides when work runs
-- The provider client contains the external TFL call
+## Why the flow and repo are shaped this way
 
-The TFL client is treated as a replaceable provider, so it could later be swapped for an ML inference call with the same task lifecycle.
+The goal is not “one big `app.py` that works,” but something that **looks like a maintainable production service**: clear boundaries, explicit configuration, and a request path you can draw on a whiteboard.
+
+**Layers and responsibilities**
+
+- **`app.py` (HTTP)** — Route handlers stay thin: parse JSON, call validation helpers, delegate to the repository and scheduler, turn domain outcomes into HTTP status codes. Error handlers map a small set of exception types to a consistent JSON error envelope so clients do not see raw stack traces.
+- **`schemas.py` (+ `models.TaskStatus`)** — Input validation and response shaping live outside HTTP so the rules are testable and reusable. Allowed TfL line IDs and the schedule-time format are **named constants**, not stringly-typed magic scattered through routes.
+- **`repository.py`** — All SQLAlchemy sessions and transactions sit here. Each public method is its own **transaction boundary** (context manager: commit / rollback / close / scoped_session cleanup). That keeps Flask and APScheduler threads from leaking session state and makes it obvious where data changes. **`expunge`** returns detached `Task` objects so callers can safely use them after the session closes—important when the scheduler or tests hold a row across boundaries.
+- **`scheduler.py`** — **When** work runs is isolated from **what** the HTTP API accepts. APScheduler jobs call back into the repository and a **`DisruptionProvider`**, so scheduling policy (e.g. `date` triggers, `max(schedule_time, now)` for past times, reload pending on startup) does not clutter route code.
+- **`tfl_client.py`** — Outbound HTTP is a **replaceable adapter**: a `Protocol` describes `get_disruptions`, and `TflClient` implements it with timeouts and structured errors (`ProviderTimeout`, `ProviderBadResponse`, etc.). The same task lifecycle could drive an ML endpoint later without rewriting the scheduler or repository contract.
+- **`config.py` + environment** — Settings come from the environment (`AppConfig.from_env`) with sensible defaults for local dev; the `AppConfig` dataclass is **frozen** to avoid accidental mutation as it is passed through `create_app`.
+- **`database.py`** — Engine and `scoped_session` construction (including SQLite `:memory:` tweaks for tests) stay in one place so deployment and tests do not duplicate connection logic.
+
+**End-to-end flow (mental model)**
+
+1. **Create** — Validate body → `TaskRepository.create_task` persists a **pending** row → `TaskScheduler.schedule_task` registers a **one-off** job keyed by task id.  
+2. **Run** — Scheduler fires → `mark_running` (returns `None` if the task is no longer pending, so double-fires are harmless) → provider fetch → `mark_succeeded` / `mark_failed`.  
+3. **Update / delete** — Mutations go through the repository; if the task is still **pending**, the scheduler is **unscheduled / rescheduled** so in-memory jobs match the database after PATCH or DELETE.
+
+That layout is deliberate: it mirrors how you would split a real service (API vs persistence vs integration vs orchestration) and makes **trade-offs explicit** (e.g. in-process scheduler vs a queue—called out under Limitations).
 
 ---
 
-## Design decisions
+## Code review interview: how to use this project
+
+For a **Stage 2 technical / code review** style conversation, interviewers are usually judging whether this resembles **honest production engineering**: structure, error handling, and whether **you** can defend what is here—not whether every advanced topic is implemented.
+
+**What to be ready to explain**
+
+1. **Architecture** — Why these modules exist, how a request moves through them, and where you would extend behaviour (e.g. new endpoint vs new repository method vs new provider).
+2. **Key design choices** — In-process **APScheduler** with `date` jobs vs external workers; **TfL** behind a **Protocol**; **repository-owned** sessions; **status** as an enum-shaped string; **Docker Compose** with a **healthcheck** so the API does not start before Postgres is ready.
+3. **Trade-offs and shortcuts** — Anything simplified for time (single replica, no migrations, no retries, minimal logging) and what would break if you scaled horizontally or lost the scheduler process.
+4. **Improvements with more time** — CI (lint, types, tests on every push), migrations (e.g. Alembic), a real **queue + worker** for scheduling, **idempotency** keys, retries/backoff, structured logging/metrics, auth/rate limits, stricter result schemas.
+
+**Framing that tends to work well**
+
+- Walk **top-down**: HTTP → validation → persistence → schedule → background run → provider.  
+- Call out **one or two happy paths and one failure path** (validation 400, not found 404, conflict 409, provider failure → `failed` task).  
+- Be able to go **deeper on demand** (e.g. why `scoped_session`, why `expire_on_commit=False`, why `mark_running` can return `None`). Relying on generated comments is fine for prep; in the room, you still need to **say** the reasoning in your own words.
+
+---
+
+## Design decisions (short list)
 
 - Flask for a small, explicit HTTP surface.
 - PostgreSQL in Docker for realistic persistence; SQLite in tests for speed.
@@ -96,7 +130,8 @@ Each task is returned as a JSON object with:
 
 ### Request fields
 
-- `**schedule_time**` — String `YYYY-MM-DDTHH:MM:SS`. If missing or empty on create/update (where applicable), the service uses **now**. Times are **naive** (server local clock). If the stored time is in the **past**, the scheduler still runs the job **as soon as possible** (`max(schedule_time, now)`), while the stored `schedule_time` field is unchanged. - `**lines`** — Comma-separated TfL **line IDs** (not display names), e.g. `victoria,central`.
+- `**schedule_time**` — String `YYYY-MM-DDTHH:MM:SS`. If missing or empty on create/update (where applicable), the service uses **now**. Times are **naive** (server local clock). If the stored time is in the **past**, the scheduler still runs the job **as soon as possible** (`max(schedule_time, now)`), while the stored `schedule_time` field is unchanged.
+- `**lines**` — Comma-separated TfL **line IDs** (not display names), e.g. `victoria,central`.
 
 ---
 
