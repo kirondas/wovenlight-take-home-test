@@ -1,6 +1,5 @@
-from datetime import datetime
 import logging
-
+from datetime import datetime
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.background import BackgroundScheduler
 
