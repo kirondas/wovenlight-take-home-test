@@ -1,14 +1,8 @@
 # TFL Scheduler Service
 
-A small Flask service for scheduling calls to Transport for London's Line
-Disruption API and storing the result for later retrieval.
+A small Flask service for scheduling calls to Transport for London's Line Disruption API and storing the result for later retrieval.
 
-The service is intentionally simple, but it is structured like a small
-production codebase: the API layer validates requests, the repository owns
-database access, the scheduler decides when work runs, and the provider client
-contains the external TFL call. The TFL client is treated as a replaceable
-provider, so it could later be swapped for an ML inference call with the same
-task lifecycle.
+The service is intentionally simple, but it is structured like a small production codebase: the API layer validates requests, the repository owns database access, the scheduler decides when work runs, and the provider client contains the external TFL call. The TFL client is treated as a replaceable provider, so it could later be swapped for an ML inference call with the same task lifecycle.
 
 ---
 
@@ -50,17 +44,31 @@ On Unix shells, use `export DATABASE_URL=...` instead of `set`.
 
 ---
 
-## How to run tests
+## How to run tests (Windows)
 
-```bash
+From the **project root** in **Command Prompt**:
+
+```bat
+python -m venv .venv
+.venv\Scripts\activate.bat
 python -m pip install -r requirements.txt .
 python -m pytest
 ```
 
-Optional verbosity: `python -m pytest -v`.
+In **PowerShell**, use the same steps; activation is typically:
 
-Tests use **SQLite in-memory**, inject **`create_app(..., start_scheduler=False)`**,
-and use a **fake TFL provider** so they do not call the live TfL API.
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt .
+python -m pytest
+```
+
+If `Activate.ps1` is blocked, run **`Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`** once, or activate with **`.venv\Scripts\activate.bat`** instead.
+
+Optional: `python -m pytest -v` for one line per test.
+
+Tests use **SQLite in-memory**, **`create_app(..., start_scheduler=False)`**, and a **fake TFL provider** (no live TfL calls).
 
 ---
 
