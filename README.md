@@ -53,8 +53,8 @@ Each task is returned as a JSON object with:
 
 - `**id`** — UUID string.
 - `**schedule_time`** — ISO-like string (no timezone; wall clock as stored).
-- `**lines**` — comma-separated line IDs (see below).
-- `**status**` — `pending`, `running`, `succeeded`, or `failed`.
+- `**lines`** — comma-separated line IDs (see below).
+- `**status`** — `pending`, `running`, `succeeded`, or `failed`.
 - `**result**` — TfL-shaped list of disruption objects, or `null` until success.
 - `**error_message**` — string on failure, else `null`.
 - `**created_at**`, `**updated_at**`, `**executed_at**` — timestamps or `null`.
@@ -79,42 +79,52 @@ the stored `schedule_time` field is unchanged.
 curl http://localhost:5555/health
 ```
 
-Response: `{"status":"ok"}`
-
-**Create a task**
+**Create a task for a single line**
 
 ```bash
-curl -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"schedule_time":"2099-01-01T17:00:00","lines":"victoria,central"}' \
-  http://localhost:5555/tasks
+curl -s -X POST http://localhost:5555/tasks -H "Content-Type: application/json" -d "{\"schedule_time\":\"2050-01-01T17:00:00\",\"lines\":\"central\"}"
 ```
 
-**Create with immediate default time** (omit or empty `schedule_time`):
+**Create a task multiple lines**
 
 ```bash
-curl -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"lines":"victoria"}' \
-  http://localhost:5555/tasks
+curl -s -X POST http://localhost:5555/tasks -H "Content-Type: application/json" -d "{\"schedule_time\":\"2099-01-01T17:00:00\",\"lines\":\"victoria,central\"}"
 ```
 
-**List / filter**
+**Create with immediate default time**:
+
+```bash
+curl -s -X POST http://localhost:5555/tasks -H "Content-Type: application/json" -d "{\"lines\":\"central\"}"
+```
+
+**List tasks:**
 
 ```bash
 curl http://localhost:5555/tasks
+```
+
+**List pending tasks:**
+
+```bash
 curl http://localhost:5555/tasks?status=pending
 ```
 
-**Get / update / delete**
+**Get task**
 
 ```bash
-curl http://localhost:5555/tasks/<task_id>
-curl -X PATCH \
-  -H "Content-Type: application/json" \
-  -d '{"schedule_time":"2099-01-01T18:30:00","lines":"jubilee"}' \
-  http://localhost:5555/tasks/<task_id>
-curl -X DELETE http://localhost:5555/tasks/<task_id>
+curl -s http://localhost:5555/tasks/TASKID
+```
+
+**Update task**
+
+```bash
+curl -X PATCH -H "Content-Type: application/json" -d "{\"schedule_time\":\"2099-01-01T18:30:00\",\"lines\":\"jubilee\"}" http://localhost:5555/tasks/TASKID
+```
+
+**Delete task**
+
+```bash
+curl -X DELETE http://localhost:5555/tasks/TASKID
 ```
 
 ### Valid line IDs
