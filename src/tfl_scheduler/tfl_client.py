@@ -1,5 +1,4 @@
 from typing import Protocol
-
 import requests
 
 
@@ -9,7 +8,7 @@ class DisruptionProvider(Protocol):
 
 
 class ProviderError(Exception):
-    """Raised when the external data or model provider cannot return a result."""
+    pass
 
 
 class ProviderTimeout(ProviderError):
