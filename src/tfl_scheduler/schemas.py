@@ -29,13 +29,7 @@ def extract_schedule_time(
     *,
     default_to_now: bool,
 ) -> datetime:
-    schedule_time = payload.get("schedule_time")
-    scheduler_time = payload.get("scheduler_time")
-
-    if schedule_time and scheduler_time and schedule_time != scheduler_time:
-        raise ValidationError("Use either schedule_time or scheduler_time, not both.")
-
-    raw_value = schedule_time if schedule_time is not None else scheduler_time
+    raw_value = payload.get("schedule_time")
     if raw_value in (None, ""):
         if default_to_now:
             return datetime.now().replace(microsecond=0)

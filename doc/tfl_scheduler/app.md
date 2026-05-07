@@ -88,7 +88,7 @@ Payload rules:
 Detect presence keys:
 
 ```python
-has_schedule_time = "schedule_time" in payload or "scheduler_time" in payload
+has_schedule_time = "schedule_time" in payload
 has_lines = "lines" in payload
 ```
 
@@ -96,7 +96,7 @@ Ensures PATCH cannot be empty `{}` accidentally — avoids silent no-op puzzleme
 
 Rebuild partial updates:
 
-- If schedule fields existed — re-parse with allow immediate default path.
+- If **`schedule_time` was in the body** — re-parse with `default_to_now=True` (empty string ⇒ run now).
 - If lines existed — optional parse — else untouched.
 
 Calls **`update_pending_task`**, clears stale results via repository internals, **`reschedule_task()`** rewriting APScheduler binding.

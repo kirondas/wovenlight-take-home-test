@@ -38,21 +38,17 @@ Custom exception Flask catches centrally → **`400`** + JSON `{error: {...}}`.
 
 ## `extract_schedule_time(payload, *, default_to_now=...)`
 
-Purpose: unify handling of **`schedule_time`** preferred field vs **`scheduler_time`** alias (brief typo/copy inconsistency).
+Reads **`schedule_time`** only (`payload.get("schedule_time")`). Any other JSON keys are ignored by this function (we do not document or branch on alternate names).
 
 ### Logic breakdown
 
-1. Read both optional keys via `.get(...)`.
-2. If **both supplied and differing** → `ValidationError` — ambiguous conflicting instructions from client.
-3. Pick whichever slot has a meaningful value (`schedule_time` wins if provided).
-4. If missing or empty string (`""`):  
-   - If `default_to_now=True`: return **current local time truncated to whole seconds**.  
-     That matches requirement “empty schedule ⇒ run immediately” while keeping JSON prettier (no microseconds).
-   - Else raise “required.”
-5. Verify type **string**.
-6. `strptime` parse or raise friendly **format mismatch** message chaining original `ValueError` (`from exc` keeps trace context developers like).
+1. If missing or empty string (`""`):  
+   - If `default_to_now=True`: return **current local time truncated to whole seconds** (immediate run).  
+   - Else raise **“schedule_time is required.”**
+2. Verify type **string**.
+3. **`strptime`** with `SCHEDULE_TIME_FORMAT`, or **`ValidationError`** with chained **`from exc`**.
 
-PATCH path reuses helper with **`default_to_now=True`** when PATCH includes scheduling fields — so empty reschedule string behaves like POST “immediate” semantics when present.
+PATCH passes **`extract_schedule_time`** only when **`"schedule_time" in payload`**, using **`default_to_now=True`** so an empty string still means “now” when the client explicitly sends the key.
 
 ---
 

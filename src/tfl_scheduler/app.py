@@ -96,7 +96,7 @@ def register_routes(
             )
 
         payload = _json_payload()
-        has_schedule_time = "schedule_time" in payload or "scheduler_time" in payload
+        has_schedule_time = "schedule_time" in payload
         has_lines = "lines" in payload
         if not has_schedule_time and not has_lines:
             raise ValidationError("Provide schedule_time and/or lines to update.")

@@ -23,16 +23,6 @@ def test_create_task_accepts_schedule_time(client):
     assert body["result"] is None
 
 
-def test_create_task_accepts_scheduler_time_alias(client):
-    response = client.post(
-        "/tasks",
-        json={"scheduler_time": future_time(), "lines": "victoria"},
-    )
-
-    assert response.status_code == 201
-    assert response.get_json()["lines"] == "victoria"
-
-
 def test_create_task_rejects_unknown_line(client):
     response = client.post(
         "/tasks",
@@ -173,32 +163,6 @@ def test_create_task_rejects_non_string_schedule_time(client):
     _assert_validation_error(response)
 
 
-def test_create_task_rejects_conflicting_schedule_and_scheduler_fields(client):
-    response = client.post(
-        "/tasks",
-        json={
-            "schedule_time": future_time(),
-            "scheduler_time": "2099-02-02T12:00:00",
-            "lines": "victoria",
-        },
-    )
-    _assert_validation_error(response)
-
-
-def test_create_task_accepts_matching_schedule_and_scheduler_fields(client):
-    """Both keys may appear only if values match (backward compatibility edge case)."""
-    t = future_time()
-    response = client.post(
-        "/tasks",
-        json={
-            "schedule_time": t,
-            "scheduler_time": t,
-            "lines": "victoria",
-        },
-    )
-    assert response.status_code == 201
-
-
 def test_create_task_rejects_non_object_json_body(client):
     response = client.post("/tasks", json=["not", "an", "object"])
     _assert_validation_error(response)
@@ -268,22 +232,6 @@ def test_patch_pending_task_rejects_invalid_lines(client):
     response = client.patch(
         f"/tasks/{created['id']}",
         json={"lines": "not-a-line"},
-    )
-    _assert_validation_error(response)
-
-
-def test_patch_pending_task_rejects_conflicting_schedule_fields(client):
-    created = client.post(
-        "/tasks",
-        json={"schedule_time": future_time(), "lines": "jubilee"},
-    ).get_json()
-
-    response = client.patch(
-        f"/tasks/{created['id']}",
-        json={
-            "schedule_time": "2099-03-03T10:00:00",
-            "scheduler_time": "2099-03-03T11:00:00",
-        },
     )
     _assert_validation_error(response)
 

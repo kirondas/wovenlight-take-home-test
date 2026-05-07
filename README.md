@@ -77,8 +77,8 @@ curl -X POST \
   http://localhost:5555/tasks
 ```
 
-The task brief uses both `schedule_time` and `scheduler_time` in different
-places. This service accepts both names, but `schedule_time` is preferred.
+JSON field **`schedule_time`** uses local wall time in the form
+`%Y-%m-%dT%H:%M:%S` (see task brief).
 
 If `schedule_time` is empty or missing, the task is scheduled to run
 immediately:
