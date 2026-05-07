@@ -1,3 +1,5 @@
+name: tfl-scheduler
+
 services:
   api:
     build: .
