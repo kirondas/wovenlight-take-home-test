@@ -1,7 +1,6 @@
+from flask import Flask, jsonify, request
 from http import HTTPStatus
 import os
-
-from flask import Flask, jsonify, request
 
 from .config import AppConfig
 from .database import build_session_factory
