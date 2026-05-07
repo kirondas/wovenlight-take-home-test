@@ -7,6 +7,18 @@ name = "tfl-scheduler"
 version = "0.1.0"
 description = "A small Flask service for scheduling TFL disruption checks."
 requires-python = ">=3.10"
+dependencies = [
+    "APScheduler==3.11.2",
+    "Flask==3.1.3",
+    "psycopg2-binary==2.9.12",
+    "requests==2.33.1",
+    "SQLAlchemy==2.0.49",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.0.3",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
