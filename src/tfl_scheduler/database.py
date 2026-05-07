@@ -1,6 +1,6 @@
-from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.pool import StaticPool
+from sqlalchemy import create_engine
 
 from .models import Base
 
