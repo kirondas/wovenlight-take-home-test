@@ -1,8 +1,7 @@
 from contextlib import contextmanager
+from sqlalchemy import select
 from datetime import datetime
 from typing import Iterator
-
-from sqlalchemy import select
 
 from .models import Task, TaskStatus
 
@@ -65,7 +64,6 @@ class TaskRepository:
                 raise TaskNotFoundError(task_id)
             if task.status != TaskStatus.PENDING.value:
                 raise TaskStateError("Only pending tasks can be updated.")
-
             if schedule_time is not None:
                 task.schedule_time = schedule_time
             if lines is not None:
