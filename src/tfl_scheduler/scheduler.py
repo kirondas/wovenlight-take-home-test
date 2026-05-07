@@ -48,7 +48,7 @@ class TaskScheduler:
         try:
             self._scheduler.remove_job(task_id)
         except JobLookupError:
-            logger.debug("No scheduled job found for task %s.", task_id)
+            logger.debug(f"No scheduled job found for task {task_id}.")
 
     def reload_pending_tasks(self) -> None:
         for task in self._repository.list_pending_tasks():
@@ -57,7 +57,7 @@ class TaskScheduler:
     def run_task(self, task_id: str) -> None:
         task = self._repository.mark_running(task_id)
         if task is None:
-            logger.info("Skipping task %s because it is no longer pending.", task_id)
+            logger.info(f"Skipping task {task_id} because it is no longer pending.")
             return
 
         try:
