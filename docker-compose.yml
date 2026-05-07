@@ -1,35 +1,44 @@
-name: tfl-scheduler
+# Local multi-container stack: Postgres + Flask API with scheduler.
+#
+# Compose ties together a Postgres 16 instance (with healthcheck and persistent
+# volume) and the API service built from the repo Dockerfile. The API receives
+# DATABASE_URL pointing at the `postgres` service hostname (Docker DNS), binds
+# Flask to 0.0.0.0 so port publishing works, and waits until Postgres reports
+# healthy before starting—avoiding race failures on first migration/table create.
+# Interview note: `depends_on.condition: service_healthy` is Compose v2+ feature.
 
-services:
-  scheduler-api:
-    container_name: tfl-scheduler-api
-    build: .
-    ports:
-      - "5555:5555"
-    environment:
-      DATABASE_URL: postgresql+psycopg2://tfl:tfl@postgres:5432/tfl_scheduler
-      FLASK_HOST: 0.0.0.0
-      FLASK_PORT: 5555
-    depends_on:
-      postgres:
-        condition: service_healthy
+name: tfl-scheduler  # Optional Compose project name (used for container/network prefixing in some versions)
 
-  postgres:
-    container_name: tfl-scheduler-postgres
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: tfl
-      POSTGRES_PASSWORD: tfl
-      POSTGRES_DB: tfl_scheduler
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tfl -d tfl_scheduler"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+services:  # Top-level mapping of service names to their specs
+  scheduler-api:  # Human-friendly service key for the Flask app container
+    container_name: tfl-scheduler-api  # Fixed name for easier `docker logs`/`exec` (optional; can collide if duplicated)
+    build: .  # Build context = repo root where Dockerfile + src live
+    ports:  # Publish container ports to the host
+      - "5555:5555"  # Map host 5555 → container 5555 where Flask listens
+    environment:  # Inject env vars into the API container process
+      DATABASE_URL: postgresql+psycopg2://tfl:tfl@postgres:5432/tfl_scheduler  # `postgres` is the DB service hostname on the user-defined bridge network
+      FLASK_HOST: 0.0.0.0  # Listen on all interfaces inside container so published port works
+      FLASK_PORT: 5555  # Matches Flask dev server port in app module
+    depends_on:  # Ordering/health constraints relative to other services
+      postgres:  # Wait for database dependency
+        condition: service_healthy  # Do not start API until healthcheck passes
 
-volumes:
-  postgres_data:
+  postgres:  # Database service
+    container_name: tfl-scheduler-postgres  # Stable name for operators
+    image: postgres:16-alpine  # Official Postgres image, smaller variant
+    environment:  # Initialise database role + database on first boot
+      POSTGRES_USER: tfl  # Superuser created in the cluster
+      POSTGRES_PASSWORD: tfl  # Password for that user (fine for local dev only)
+      POSTGRES_DB: tfl_scheduler  # Default database created matching API connection string
+    ports:  # Expose Postgres to host for local tools (psql, GUI clients)
+      - "5432:5432"  # Standard Postgres port mapping
+    healthcheck:  # Command Compose runs to decide if dependency is ready
+      test: ["CMD-SHELL", "pg_isready -U tfl -d tfl_scheduler"]  # Built-in probe: exit 0 when accepting connections
+      interval: 5s  # Poll every 5 seconds
+      timeout: 3s  # Each probe must finish within 3 seconds
+      retries: 10  # Mark unhealthy after consecutive failures (extends startup grace)
+    volumes:  # Named volume mount for durable data across container recreation
+      - postgres_data:/var/lib/postgresql/data  # Postgres stores cluster files here
+
+volumes:  # Declare named volumes referenced above
+  postgres_data:  # Empty object = default local driver volume managed by Docker
